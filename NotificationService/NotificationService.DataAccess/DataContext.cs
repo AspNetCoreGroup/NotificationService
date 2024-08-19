@@ -6,11 +6,11 @@ namespace NotificationService.DataAccess;
 public class DataContext : DbContext
 {
     public DbSet<User> Users { get; set; }
-    public DbSet<NotificationGroup> NotificationGroups { get; set; }
-    public DbSet<UserGroup> UserGroups { get; set; }
     public DbSet<MessageTracking> MessageTrackings { get; set; }
+    public DbSet<SubscriptionType> SubscriptionTypes { get; set; }
+    public DbSet<UserSubscription> UserSubscriptions { get; set; }
+    public DbSet<MessageDeliveryStatus> MessageDeliveryStatuses { get; set; }
     
-    public DbSet<Priority> Priorities { get; set; }
 
     public DataContext()
     {
@@ -29,20 +29,11 @@ public class DataContext : DbContext
         modelBuilder.Entity<User>()
             .HasKey(u => u.Id);
 
-        modelBuilder.Entity<NotificationGroup>()
-            .HasKey(ng => ng.Id);
-
-        modelBuilder.Entity<UserGroup>()
-            .HasKey(ug => new { ug.UserId, ug.GroupId });
-
         modelBuilder.Entity<MessageTracking>()
             .HasKey(mt => mt.MessageId);
         
         modelBuilder.Entity<SubscriptionType>()
             .HasKey(st => st.Id);
-        
-        modelBuilder.Entity<Priority>()
-            .HasKey(p => p.Id);
         
         modelBuilder.Entity<UserSubscription>()
             .HasKey(us => new { us.UserId, us.SubscriptionTypeId });
@@ -50,24 +41,11 @@ public class DataContext : DbContext
         modelBuilder.Entity<MessageDeliveryStatus>()
             .HasKey(mds => mds.Id);
 
-        // Определение внешних ключей и связей между таблицами
-        modelBuilder.Entity<UserGroup>()
-            .HasOne(ug => ug.User)
-            .WithMany(u => u.UserGroups)
-            .HasForeignKey(ug => ug.UserId);
-        modelBuilder.Entity<UserGroup>()
-            .HasOne(ug => ug.NotificationGroup)
-            .WithMany(ng => ng.UserGroups)
-            .HasForeignKey(ug => ug.GroupId);
-
+        // Определение внешних ключей и связей между таблицам
         modelBuilder.Entity<MessageTracking>()
             .HasOne(mt => mt.User)
             .WithMany(u => u.MessageTrackings)
             .HasForeignKey(mt => mt.UserId);
-        modelBuilder.Entity<MessageTracking>()
-            .HasOne(mt => mt.Priority)
-            .WithMany(u => u.MessageTrackings)
-            .HasForeignKey(mt => mt.PriorityId);
         modelBuilder.Entity<MessageTracking>()
             .HasOne(mt => mt.MessageDeliveryStatus)
             .WithMany(u => u.MessageTrackings)
