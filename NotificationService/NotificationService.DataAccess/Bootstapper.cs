@@ -10,12 +10,12 @@ public static class Bootstapper
     public static IServiceCollection AddDataAccess(this IServiceCollection services, string connectionString)
     {
         services
-            .AddScoped<IUserRepository, UserRepository>()
-            .AddScoped<IMessageRepository, MessageRepository>()
             .AddDbContext<DataContext>(x =>
             {
                 x.UseNpgsql(connectionString);
-            });
+            })
+            .AddScoped<IUserRepository, UserRepository>()
+            .AddScoped<IMessageRepository, MessageRepository>();
 
         return services;
     }

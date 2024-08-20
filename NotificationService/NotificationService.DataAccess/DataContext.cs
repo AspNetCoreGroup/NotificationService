@@ -63,5 +63,17 @@ public class DataContext : DbContext
             .HasOne(ug => ug.SubscriptionType)
             .WithMany(ng => ng.UserSubscriptions)
             .HasForeignKey(ug => ug.SubscriptionTypeId);
+        
+        // Начальные данные
+        modelBuilder.Entity<SubscriptionType>().HasData(
+            new SubscriptionType { Id = 1, Code = "TELEGRAM", Description = "Telegram" },
+            new SubscriptionType { Id = 2, Code = "EMAIL", Description = "Email" }
+        );
+
+        modelBuilder.Entity<MessageDeliveryStatus>().HasData(
+            new MessageDeliveryStatus { Id = 1, Code = "PENDING", Description = "Pending" },
+            new MessageDeliveryStatus { Id = 2, Code = "SEND", Description = "Sent" },
+            new MessageDeliveryStatus { Id = 3, Code = "FAIL", Description = "Failed" }
+        );
     }
 }
