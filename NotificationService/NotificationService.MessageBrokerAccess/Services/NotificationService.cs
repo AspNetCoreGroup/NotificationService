@@ -16,9 +16,6 @@ public class NotificationService : INotificationService, IDisposable
     private readonly ILogger<NotificationService> _logger;
 
     private readonly IServiceProvider _serviceProvider;
-    // private readonly ITelegramService _telegramService;
-    // private readonly IUserRepository _userRepository;
-    // private readonly IMessageRepository _messageRepository;
 
     private readonly IConnection _connection;
     private readonly IModel _channel;
@@ -26,17 +23,11 @@ public class NotificationService : INotificationService, IDisposable
 
     public NotificationService(
         ILogger<NotificationService> logger,
-        // ITelegramService telegramService,
-        // IUserRepository userRepository,
-        // IMessageRepository messageRepository,
         IServiceProvider serviceProvider
         )
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
-        // _telegramService = telegramService;
-        // _userRepository = userRepository;
-        // _messageRepository = messageRepository;
         
         var uri = Environment.GetEnvironmentVariable("ConnectionStrings_Notification_RabbitMQ");
 
@@ -48,7 +39,7 @@ public class NotificationService : INotificationService, IDisposable
         
         var factory = new ConnectionFactory() { Uri = new Uri(uri) };
         
-        string queueName = "";
+        string queueName = "NotificationMessages";
         
         _connection = factory.CreateConnection();
         _channel = _connection.CreateModel();
@@ -79,11 +70,9 @@ public class NotificationService : INotificationService, IDisposable
 
     private async Task ProcessMessage(string message)
     {
-        // TODO
-        // Получение уведомления
-        var events = JsonSerializer.Deserialize<EventsMessage>(message);
+        var notification = JsonSerializer.Deserialize<NotificationMessage>(message);
 
-        if (events is null)
+        if (notification is null)
         {
             _logger.LogWarning("EventsMessage from notification broker is null");
             return;
@@ -93,47 +82,55 @@ public class NotificationService : INotificationService, IDisposable
         var userRepository = scope.ServiceProvider.GetRequiredService<IUserRepository>();
         var messageRepository = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
         var telegramService = scope.ServiceProvider.GetRequiredService<ITelegramService>();
-
-        foreach (var e in events.Events)
-        {
-            var userId = e.UserId;
-            
-            // Получение юзера и как его уведомлять
-            var user = await userRepository.GetUserByIdAsync(userId);
-
-            if (user is null)
-            {
-                _logger.LogWarning("Dont get User with id {Id} from db", userId);
-                continue;
-            }
-
-            var subs = await userRepository.GetUserSubscriptionsAsync(userId);
         
-            // По типам как уведомлять формирование сообщение и отправка через определенный брокер
-            foreach (var sub in subs)
+        var userId = notification.UserID;
+        
+        // Получение юзера и как его уведомлять
+        var user = await userRepository.GetUserByIdAsync(userId);
+
+        if (user is null)
+        {
+            _logger.LogWarning("Dont get User with id {Id} from db", userId);
+            return;
+        }
+
+        var subs = await userRepository.GetUserSubscriptionsAsync(userId);
+    
+        // По типам как уведомлять формирование сообщение и отправка через определенный брокер
+        foreach (var sub in subs)
+        {
+            MessageTrackingDto messageTracking = new()
             {
-                MessageTrackingDto messageTracking = new()
-                {
-                    MessageDeliveryStatusCode = "PENDING",
-                    SubscriptionTypeCode = sub,
-                    MessageText = JsonSerializer.Serialize(e),
-                    UserId = userId
-                };
-                
-                var messageId = await messageRepository.AddMessageAsync(messageTracking);
-                
-                switch (sub)
-                {
-                    case "TELEGRAM":
-                        await telegramService.SendEvent(e);
-                        break;
-                    case "EMAIL":
-                        _logger.LogDebug("No email service");
-                        break;
-                    default:
-                        await messageRepository.UpdateMessageDeliveryStatusAsync(messageId, "FAIL");
-                        break;
-                }
+                MessageDeliveryStatusCode = "PENDING",
+                SubscriptionTypeCode = sub,
+                MessageText = JsonSerializer.Serialize(notification),
+                UserId = userId
+            };
+            
+            var messageId = await messageRepository.AddMessageAsync(messageTracking);
+            _logger.LogInformation("Added message with id {MessageId} to db", messageId);
+            
+            switch (sub)
+            {
+                case "TELEGRAM":
+                    var notificationEvent = new Event
+                    {
+                        UserId = userId,
+                        Type = notification.NotificationsType,
+                        MessageId = messageId,
+                        MessageParams = notification.Params?.ToArray() ?? Enumerable.Empty<MessageParam>().ToArray()
+                    };
+                    _logger.LogInformation("Send message {MessageId} to telegram broker", messageId);
+                    await telegramService.SendEvent(notificationEvent);
+                    break;
+                case "EMAIL":
+                    _logger.LogDebug("No email service");
+                    break;
+                default:
+                    _logger.LogInformation("UpdateMessageDeliveryStatus to message {MessageId} with FAIL", 
+                        messageId);
+                    await messageRepository.UpdateMessageDeliveryStatusAsync(messageId, "FAIL");
+                    break;
             }
         }
     }

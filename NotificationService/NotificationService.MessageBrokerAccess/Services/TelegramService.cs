@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NotificationService.Domain.Abstractions.BrokersServices;
 using NotificationService.Domain.Abstractions.Repositories;
-using NotificationService.Domain.Entities;
+using NotificationService.Domain.Dtos;
 using NotificationService.MessageBrokerAccess.Entities;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -15,27 +15,22 @@ public class TelegramService : ITelegramService, IDisposable
 {
     private readonly ILogger<TelegramService> _logger;
     private readonly IServiceProvider _serviceProvider;
-    // private readonly IMessageRepository _messageRepository;
-    // private readonly IUserRepository _userRepository;
+    
     private readonly IConnection _connection;
     private readonly IModel _channel;
     
     private const string SendEventQueue = "telegram_send_message_queue";
-    private const string SendRegistrationQueue = "telegram_send_message_queue";
+    private const string SendRegistrationQueue = "telegram_send_registration_queue";
     private const string GetStatusQueue = "telegram_get_message_status_queue";
     private const string GetRegistrationQueue = "telegram_get_registration_queue";
 
     public TelegramService(
         ILogger<TelegramService> logger,
-        // IMessageRepository messageRepository,
-        // IUserRepository userRepository,
         IServiceProvider serviceProvider
         )
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
-        // _messageRepository = messageRepository;
-        // _userRepository = userRepository;
         
         var uri = Environment.GetEnvironmentVariable("ConnectionStrings_Telegram_RabbitMQ");
 
@@ -73,17 +68,17 @@ public class TelegramService : ITelegramService, IDisposable
         var body = Encoding.UTF8.GetBytes(messageString);
         _channel.BasicPublish(exchange: "", routingKey: SendEventQueue, basicProperties: null, body: body);
         
-        _logger.LogDebug("Sent: {Message}", messageString);
+        _logger.LogDebug("SendEvent: {Message}", messageString);
     }
     
-    public async Task SendUserForRegistration(User user)
+    public async Task SendUserForRegistration(AuthUser user)
     {
         var message = JsonSerializer.Serialize(user);
         
         var body = Encoding.UTF8.GetBytes(message);
         _channel.BasicPublish(exchange: "", routingKey: SendRegistrationQueue, basicProperties: null, body: body);
         
-        _logger.LogDebug("Sent: {Message}", message);
+        _logger.LogDebug("SendUserForRegistration: {Message}", message);
     }
 
     public void StartListeningForResponses()
@@ -134,6 +129,8 @@ public class TelegramService : ITelegramService, IDisposable
         var messageRepository = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
         
         var statusCode = messageStatus.IsSuccess ? "SEND" : "FAIL";
+        _logger.LogInformation("UpdateMessageDeliveryStatus to message {MessageId} with statusCode {StatusCode}", 
+            messageStatus.MessageId, statusCode);
         await messageRepository.UpdateMessageDeliveryStatusAsync(messageStatus.MessageId, statusCode);
     }
     
@@ -150,6 +147,8 @@ public class TelegramService : ITelegramService, IDisposable
         using var scope = _serviceProvider.CreateScope();
         var userRepository = scope.ServiceProvider.GetRequiredService<IUserRepository>();
         
+        _logger.LogInformation("UpdateTelegramChatIdAsync to user {UserId} to TelegramChatId {TelegramChatId}", 
+            registration.UserId, registration.TelegramChatId);
         await userRepository.UpdateTelegramChatIdAsync(registration.UserId, registration.TelegramChatId);
     }
 }

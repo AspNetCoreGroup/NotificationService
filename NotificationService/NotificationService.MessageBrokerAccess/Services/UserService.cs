@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NotificationService.Domain.Abstractions.BrokersServices;
 using NotificationService.Domain.Abstractions.Repositories;
+using NotificationService.Domain.Dtos;
 using NotificationService.Domain.Entities;
 using NotificationService.Domain.Settings;
 using NotificationService.MessageBrokerAccess.Entities;
@@ -79,6 +80,8 @@ public class UserService : IUserService, IDisposable
     
     private async Task ProcessMessage(string message)
     {
+        _logger.LogInformation("Get message from user broker: {Message}", message);
+        
         UserDto? userFromBroker;
 
         try
@@ -106,21 +109,48 @@ public class UserService : IUserService, IDisposable
         };
 
         using var scope = _serviceProvider.CreateScope();
-        
-        var userRepository = scope.ServiceProvider.GetRequiredService<IUserRepository>();
-        
-        await userRepository.AddUserAsync(user);
 
-        if (!string.IsNullOrEmpty(user.Telegram))
+        try
         {
-            await userRepository.AddSubscriptionToUserAsync(user.Id, "TELEGRAM");
+            var userRepository = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+        
+            _logger.LogInformation("Add user to db with id {UserId}", user.Id);
+            await userRepository.AddUserAsync(user);
+
+            if (!string.IsNullOrEmpty(user.Telegram))
+            {
+                _logger.LogInformation("Add to user {UserId} telegram sub", user.Id);
+                await userRepository.AddSubscriptionToUserAsync(user.Id, "TELEGRAM");
+            }
+            if (!string.IsNullOrEmpty(user.Email))
+            {
+                _logger.LogInformation("Add to user {UserId} email sub", user.Id);
+                await userRepository.AddSubscriptionToUserAsync(user.Id, "EMAIL");
+            }
         }
-        if (!string.IsNullOrEmpty(user.Email))
+        catch (Exception e)
         {
-            await userRepository.AddSubscriptionToUserAsync(user.Id, "EMAIL");
+            _logger.LogError(e, "Error in working with user in db while process message from user broker");
+            return;
         }
-    
-        var telegramService = scope.ServiceProvider.GetRequiredService<ITelegramService>();
-        await telegramService.SendUserForRegistration(user);
+
+        try
+        {
+            _logger.LogInformation("Send user {UserId} to telegram broker", user.Id);
+            var telegramService = scope.ServiceProvider.GetRequiredService<ITelegramService>();
+            await telegramService.SendUserForRegistration(new AuthUser
+            {
+                Id = user.Id,
+                Name = user.Name,
+                Telegram = user.Telegram,
+                Email = user.Email,
+                TelegramChatId = user.TelegramChatId
+            });
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Error to SendUserForRegistration while process message from user broker");
+            return;
+        }
     }
 }

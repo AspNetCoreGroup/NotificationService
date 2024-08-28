@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using NotificationService.Domain.Abstractions.BrokersServices;
-using NotificationService.Domain.Abstractions.Repositories;
 
 namespace NotificationService.MessageBrokerAccess;
 
@@ -10,7 +9,7 @@ public static class Bootstapper
     {
         services.AddSingleton<IUserService, UserService>();
         services.AddSingleton<ITelegramService, TelegramService>();
-        services.AddSingleton<IUserService, UserService>();
+        services.AddSingleton<INotificationService, Services.NotificationService>();
 
         return services;
     }
