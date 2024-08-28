@@ -5,7 +5,7 @@ namespace NotificationService.DataAccess;
 
 public class DataContext : DbContext
 {
-    public DbSet<User> Users { get; set; }
+    public DbSet<User?> Users { get; set; }
     public DbSet<MessageTracking> MessageTrackings { get; set; }
     public DbSet<SubscriptionType> SubscriptionTypes { get; set; }
     public DbSet<UserSubscription> UserSubscriptions { get; set; }

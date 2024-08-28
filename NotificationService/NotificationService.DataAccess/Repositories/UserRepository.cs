@@ -27,13 +27,13 @@ public class UserRepository : IUserRepository
             .ToListAsync();
     }
 
-    public async Task AddUserAsync(User user)
+    public async Task AddUserAsync(User? user)
     {
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
     }
 
-    public async Task UpdateUserAsync(User user)
+    public async Task UpdateUserAsync(User? user)
     {
         _context.Users.Update(user);
         await _context.SaveChangesAsync();
@@ -49,18 +49,83 @@ public class UserRepository : IUserRepository
         }
     }
 
-    public async Task AddSubscriptionToUserAsync(int userId, int subscriptionTypeId)
+    public async Task AddSubscriptionToUserAsync(int userId, string subscriptionTypeCode)
     {
+        var subscriptionType = await _context.SubscriptionTypes
+            .FirstOrDefaultAsync(mds => mds.Code == subscriptionTypeCode);
+
+        if (subscriptionType == null)
+        {
+            throw new ArgumentException($"Invalid MessageDeliveryStatusCode: {subscriptionTypeCode}");
+        }
+        
         var user = await GetUserByIdAsync(userId);
         if (user != null)
         {
             var subscription = new UserSubscription
             {
                 UserId = userId,
-                SubscriptionTypeId = subscriptionTypeId
+                SubscriptionTypeId = subscriptionType.Id
             };
             _context.UserSubscriptions.Add(subscription);
             await _context.SaveChangesAsync();
         }
+    }
+    
+    public async Task RemoveSubscriptionFromUserAsync(int userId, string subscriptionTypeCode)
+    {
+        var subscriptionType = await _context.SubscriptionTypes
+            .FirstOrDefaultAsync(mds => mds.Code == subscriptionTypeCode);
+
+        if (subscriptionType == null)
+        {
+            throw new ArgumentException($"Invalid MessageDeliveryStatusCode: {subscriptionTypeCode}");
+        }
+        
+        var subscription = await _context.UserSubscriptions
+            .FirstOrDefaultAsync(us => us.UserId == userId && us.SubscriptionTypeId == subscriptionType.Id);
+        if (subscription != null)
+        {
+            _context.UserSubscriptions.Remove(subscription);
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    public async Task UpdateTelegramChatIdAsync(int userId, long newTelegramChatId)
+    {
+        var user = await GetUserByIdAsync(userId);
+        if (user != null)
+        {
+            user.TelegramChatId = newTelegramChatId;
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    public async Task UpdateTelegramAsync(int userId, string newTelegram)
+    {
+        var user = await GetUserByIdAsync(userId);
+        if (user != null)
+        {
+            user.Telegram = newTelegram;
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    public async Task UpdateEmailAsync(int userId, string newEmail)
+    {
+        var user = await GetUserByIdAsync(userId);
+        if (user != null)
+        {
+            user.Email = newEmail;
+            await _context.SaveChangesAsync();
+        }
+    }
+    
+    public async Task<string[]> GetUserSubscriptionsAsync(int userId)
+    {
+        return await _context.UserSubscriptions
+            .Where(us => us.UserId == userId)
+            .Select(us => us.SubscriptionType.Code)
+            .ToArrayAsync();
     }
 }

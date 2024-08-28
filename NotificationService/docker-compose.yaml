@@ -9,11 +9,26 @@ services:
     ports:
       - "5432:5432"
 
-  rabbitmq:
+  user_rabbitmq:
     image: rabbitmq:3-management
     ports:
       - "5672:5672"
-      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+  
+  telegram_rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5673:5673"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  notification_rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5674:5674"
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -25,12 +40,13 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings_NotificationService_Postgres=Host=db;Database=notificationservicedb;Username=user;Password=1111
-      - RabbitMQ__HostName=rabbitmq
-      - RabbitMQ__UserName=user
-      - RabbitMQ__Password=password
-      - ConnectionStrings__RabbitMQ=amqp://guest:guest@rabbitmq:5672
+      - ConnectionStrings_Notification_RabbitMQ=amqp://guest:guest@notification_rabbitmq:5672
+      - ConnectionStrings_Telegram_RabbitMQ=amqp://guest:guest@telegram_rabbitmq:5673
+      - ConnectionStrings_User_RabbitMQ=amqp://guest:guest@user_rabbitmq:5674
     depends_on:
       - db
-      - rabbitmq
+      - user_rabbitmq
+      - telegram_rabbitmq
+      - notification_rabbitmq
     ports:
       - "5010:80"
