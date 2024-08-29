@@ -39,11 +39,12 @@ public class NotificationService : INotificationService, IDisposable
         
         var factory = new ConnectionFactory() { Uri = new Uri(uri) };
         
-        string queueName = "NotificationMessages";
+        _queueName = "NotificationMessages";
         
         _connection = factory.CreateConnection();
         _channel = _connection.CreateModel();
-        _queueName = queueName;
+        
+        _channel.QueueDeclare(queue: _queueName, durable: false, exclusive: false, autoDelete: false, arguments: null);
     }
 
     public void Dispose()
@@ -54,23 +55,36 @@ public class NotificationService : INotificationService, IDisposable
 
     public void StartListening()
     {
-        _channel.QueueDeclare(queue: _queueName, durable: false, exclusive: false, autoDelete: false, arguments: null);
-
         var consumer = new EventingBasicConsumer(_channel);
         consumer.Received += async (model, ea) =>
         {
             var body = ea.Body.ToArray();
             var message = Encoding.UTF8.GetString(body);
             
-            await ProcessMessage(message);
+            var param = PropertiesToDictionary(ea.BasicProperties);
+
+            var args = new MessageRecievedEventArgs()
+            {
+                QueueName = _queueName,
+                Message = message,
+                Param = param,
+                Failed = false,
+                Hadled = false,
+                Rejected = false,
+                Resended = false,
+            };
+            
+            await ProcessMessage(args);
         };
 
         _channel.BasicConsume(queue: _queueName, autoAck: true, consumer: consumer);
     }
 
-    private async Task ProcessMessage(string message)
+    private async Task ProcessMessage(MessageRecievedEventArgs args)
     {
-        var notification = JsonSerializer.Deserialize<NotificationMessage>(message);
+        var notification = ProcessArgs(args);
+        
+        // var notification = JsonSerializer.Deserialize<NotificationMessage>(message);
 
         if (notification is null)
         {
@@ -133,5 +147,43 @@ public class NotificationService : INotificationService, IDisposable
                     break;
             }
         }
+    }
+
+    private NotificationMessage? ProcessArgs(MessageRecievedEventArgs args)
+    {
+        try
+        {
+            _logger.LogInformation("Get message from queue \"{queueName}\" - \"{message}\".", args.QueueName,
+                args.Message);
+            
+            var r = JsonSerializer.Deserialize<DataEventMessage<NotificationMessage>>(args.Message);
+            return r?.Data;
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Error while ProcessArgs with message - \"{message}\".", args.Message);
+        }
+        
+        return null;
+    }
+    
+    private static Dictionary<string, string> PropertiesToDictionary(IBasicProperties properties)
+    {
+        return new Dictionary<string, string>()
+        {
+            { "AppId", properties.AppId },
+            { "ClusterId", properties.ClusterId },
+            { "ContentEncoding", properties.ContentEncoding },
+            { "ContentType", properties.ContentType },
+            { "CorrelationId", properties.CorrelationId },
+            { "DeliveryMode", properties.DeliveryMode.ToString() },
+            { "Expiration", properties.Expiration },
+            { "MessageId", properties.MessageId },
+            { "Persistent", properties.Persistent.ToString() },
+            { "Priority", properties.Priority.ToString() },
+            { "ReplyTo", properties.ReplyTo },
+            { "Type", properties.Type },
+            { "UserId", properties.UserId }
+        };
     }
 }

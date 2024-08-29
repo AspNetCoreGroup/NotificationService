@@ -9,7 +9,7 @@ using NotificationService.MessageBrokerAccess.Entities;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-namespace NotificationService.MessageBrokerAccess;
+namespace NotificationService.MessageBrokerAccess.Services;
 
 public class TelegramService : ITelegramService, IDisposable
 {

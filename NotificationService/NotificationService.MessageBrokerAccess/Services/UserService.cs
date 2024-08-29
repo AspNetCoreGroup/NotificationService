@@ -21,15 +21,10 @@ public class UserService : IUserService, IDisposable
     private readonly string _queueName;
 
     private readonly ILogger<UserService> _logger;
-    // private readonly IUserRepository _userRepository;
-    // private readonly ITelegramService _telegramService;
     private readonly IServiceProvider _serviceProvider;
 
     public UserService(
         ILogger<UserService> logger,
-        // IUserRepository userRepository,
-        // ITelegramService telegramService,
-        IOptions<UserRabbitMqConfiguration> config,
         IServiceProvider serviceProvider
     )
     {
@@ -48,7 +43,7 @@ public class UserService : IUserService, IDisposable
         }
         
         
-        string queueName = "user_queue";
+        string queueName = "DataEventsNotification";
         
         var factory = new ConnectionFactory() { Uri = new Uri(uri) };
         _connection = factory.CreateConnection();
@@ -72,21 +67,35 @@ public class UserService : IUserService, IDisposable
             var body = ea.Body.ToArray();
             var message = Encoding.UTF8.GetString(body);
             
-            await ProcessMessage(message);
+            var param = PropertiesToDictionary(ea.BasicProperties);
+
+            var args = new MessageRecievedEventArgs()
+            {
+                QueueName = _queueName,
+                Message = message,
+                Param = param,
+                Failed = false,
+                Hadled = false,
+                Rejected = false,
+                Resended = false,
+            };
+            
+            await ProcessMessage(args);
         };
 
         _channel.BasicConsume(queue: _queueName, autoAck: true, consumer: consumer);
     }
     
-    private async Task ProcessMessage(string message)
+    private async Task ProcessMessage(MessageRecievedEventArgs args)
     {
-        _logger.LogInformation("Get message from user broker: {Message}", message);
+        // _logger.LogInformation("Get message from user broker: {Message}", message);
         
         UserDto? userFromBroker;
 
         try
         {
-            userFromBroker = JsonSerializer.Deserialize<UserDto>(message);
+            // userFromBroker = JsonSerializer.Deserialize<UserDto>(message);
+            userFromBroker = ProcessArgs(args);
         }
         catch (Exception e)
         {
@@ -152,5 +161,53 @@ public class UserService : IUserService, IDisposable
             _logger.LogError(e, "Error to SendUserForRegistration while process message from user broker");
             return;
         }
+    }
+    
+    private UserDto? ProcessArgs(MessageRecievedEventArgs args)
+    {
+        try
+        {
+            _logger.LogInformation("Get message from queue \"{queueName}\" - \"{message}\".", args.QueueName,
+                args.Message);
+
+            var contentType = args.Param["ContentType"];
+
+            if (!contentType.StartsWith("DataEventMessage"))
+            {
+                throw new Exception("Message must be with content_type starts with DataEventMessage");
+            }
+
+            if (contentType == "DataEventMessage<UserDto>")
+            {
+                var r = JsonSerializer.Deserialize<DataEventMessage<UserDto>>(args.Message);
+                return r?.Data;
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Error while ProcessArgs with message - \"{message}\".", args.Message);
+        }
+
+        return null;
+    }
+    
+    private static Dictionary<string, string> PropertiesToDictionary(IBasicProperties properties)
+    {
+        return new Dictionary<string, string>()
+        {
+            { "AppId", properties.AppId },
+            { "ClusterId", properties.ClusterId },
+            { "ContentEncoding", properties.ContentEncoding },
+            { "ContentType", properties.ContentType },
+            { "CorrelationId", properties.CorrelationId },
+            { "DeliveryMode", properties.DeliveryMode.ToString() },
+            { "Expiration", properties.Expiration },
+            { "MessageId", properties.MessageId },
+            { "Persistent", properties.Persistent.ToString() },
+            { "Priority", properties.Priority.ToString() },
+            { "ReplyTo", properties.ReplyTo },
+            { "Type", properties.Type },
+            { "UserId", properties.UserId }
+        };
     }
 }

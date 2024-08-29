@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using NotificationService.Domain.Abstractions.BrokersServices;
+using NotificationService.MessageBrokerAccess.Services;
 
 namespace NotificationService.MessageBrokerAccess;
 
